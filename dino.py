@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This software may be used and distributed in accordance with
-# the terms of the DINOv3 License Agreement in DINOv3-LICENSE.md.
+# the terms of the DINOv3 License Agreement in doc/DINOv3-LICENSE.md.
 
 """发布模型所用的 DINOv3 ViT-B/16 纯推理骨干。"""
 

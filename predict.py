@@ -11,7 +11,7 @@ import torch
 
 from dino import DinoV3
 from inputs import load_track, read_video_info, trajectory_rows
-from model import EventModel, VisualTemporalModel
+from model import TrajectoryExpert, VisualExpert
 from vision import extract_visual
 
 MODEL_DIR = Path(__file__).resolve().parent / "models"
@@ -100,8 +100,8 @@ def decode_events(scores: list, times: np.ndarray, track: dict) -> list[dict]:
 
 
 def load_experts(model_dir: Path, device: torch.device) -> tuple:
-    track = torch.load(model_dir / "default-b0.pt", map_location="cpu", weights_only=True)
-    visual = torch.load(model_dir / "default-region-visual.pt", map_location="cpu", weights_only=True)
+    track = torch.load(model_dir / "trajectory_expert.pt", map_location="cpu", weights_only=True)
+    visual = torch.load(model_dir / "visual_expert.pt", map_location="cpu", weights_only=True)
     for payload, kind, radius, span in (
         (track, "trajectory", 12, 0.4), (visual, "visual_tile_region_temporal", 24, 1.6),
     ):
@@ -111,8 +111,8 @@ def load_experts(model_dir: Path, device: torch.device) -> tuple:
         if any(contract.get(key) != value for key, value in expected.items()):
             raise ValueError("权重不属于当前默认双专家推理合同")
     if track["contract"]["base_spec"].get("coordinate_precision") != "consistent_float32":
-        raise ValueError("B0 权重必须使用 consistent_float32 轨迹")
-    track_model, visual_model = EventModel(), VisualTemporalModel()
+        raise ValueError("轨迹专家权重必须使用 consistent_float32 轨迹")
+    track_model, visual_model = TrajectoryExpert(), VisualExpert()
     track_model.load_state_dict(track["model_state"], strict=True)
     visual_model.load_state_dict(visual["model_state"], strict=True)
     return (track_model.eval().requires_grad_(False).to(device),
@@ -155,7 +155,7 @@ def predict(video: Path, trajectory: Path, *, model_dir: Path = MODEL_DIR,
                                  device, batch_size, trajectory=False)
     visual_head_seconds = perf_counter() - stage
     stage = perf_counter()
-    # 与原入口一致：各路 float32 分数转 Python float 后等权相加。
+    # 各路 float32 分数转 Python float 后等权相加。
     scores = [[0.5 * a + 0.5 * b for a, b in zip(left, right, strict=True)]
               for left, right in zip(track_scores, visual_scores, strict=True)]
     events = decode_events(scores, info["frame_times"], track)
@@ -163,7 +163,7 @@ def predict(video: Path, trajectory: Path, *, model_dir: Path = MODEL_DIR,
     elapsed = perf_counter() - started
     return {
         "sample_id": Path(video).stem, "vision_mode": "fusion",
-        "model": "b0-region-temporal-20260913",
+        "model": "trajectory-visual-fusion-v1",
         "video": str(Path(video).resolve()), "trajectory": str(Path(trajectory).resolve()),
         "width": info["width"], "height": info["height"], "fps": info["fps"],
         "scores": [{"frame_number": i, "hit_score": score[0], "bounce_score": score[1]}

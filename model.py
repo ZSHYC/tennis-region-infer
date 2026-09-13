@@ -38,7 +38,7 @@ class _Heads(nn.Module):
         }
 
 
-class EventModel(_Heads):
+class TrajectoryExpert(_Heads):
     """11 维轨迹双头模型；保留发布权重中 779 维投影的完整参数。"""
 
     def __init__(self) -> None:
@@ -69,7 +69,7 @@ class EventModel(_Heads):
         return self._heads(torch.cat((center, temporal_mean, temporal_max), dim=-1))
 
 
-class VisualTemporalModel(_Heads):
+class VisualExpert(_Heads):
     """五视图 DINOv3 特征的区域优先时序双头模型。"""
 
     def __init__(self) -> None:

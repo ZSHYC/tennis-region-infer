@@ -1,4 +1,4 @@
-"""从原视频和 TrackNet CSV 构造默认 B0 所需输入。"""
+"""从原视频和 TrackNet CSV 构造轨迹专家所需输入。"""
 
 import csv
 import json
