@@ -1,0 +1,33 @@
+# 发布数据已经包含 video、tracknetv5 和 GT；prepare 不负责生成这些原始输入。
+data:
+  # 所有视频都进入训练，不再单独划分验证集或测试集。
+  train_sources:
+    - '20260706_0712'
+    - 2606_admin_back
+    - loveall
+    - tracknet_tennis
+    - e2espot_tennis
+  # back_match_clipped 只用于最终评估，绝不参与训练。
+  eval_sources:
+    - back_match_clipped
+
+train:
+  seed: 20260710
+  negative_seed: 20260709
+  epochs: 20
+  batch_size: 256
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  min_learning_rate: 0.00005
+  negative_ratio: 5
+  positive_radius: 2
+  ignore_radius: 2
+  positive_weight: 2
+  type_weight: 0.5
+
+predict:
+  batch_size: 512
+  thresholds:
+    hit: 0.4
+    bounce: 0.4
+  nms_radius: 5

@@ -13,6 +13,8 @@ from dino import DinoV3
 from inputs import load_track, read_video_info, trajectory_rows
 from model import TrajectoryExpert, VisualExpert
 from vision import extract_visual
+from dataset import load_config
+from metrics import ScoreRow, scores_to_events
 
 MODEL_DIR = Path(__file__).resolve().parent / "models"
 EVENT_TYPES = ("hit", "bounce")
@@ -80,22 +82,19 @@ def dense_scores(model: torch.nn.Module, rows: torch.Tensor, times: torch.Tensor
     return scores
 
 
-def decode_events(scores: list, times: np.ndarray, track: dict) -> list[dict]:
+def decode_events(scores: list, times: np.ndarray, track: dict,
+                  thresholds: dict | None = None, nms_radius: int = 5) -> list[dict]:
     events = []
-    for column, event_type in enumerate(EVENT_TYPES):
-        kept = []
-        for frame in sorted(range(len(scores)), key=lambda i: (-scores[i][column], i)):
-            score = scores[frame][column]
-            if score < 0.4 or any(abs(frame - previous) <= 5 for previous in kept):
-                continue
-            kept.append(frame)
-            detected = bool(track["detected"][frame])
-            events.append({
-                "frame_number": frame, "timestamp_seconds": float(times[frame]),
-                "event_type": event_type, "score": score,
-                "x": float(track["x"][frame]) if detected else None,
-                "y": float(track["y"][frame]) if detected else None,
-            })
+    rows = [ScoreRow("", frame, float(value[0]), float(value[1])) for frame, value in enumerate(scores)]
+    for event in scores_to_events(rows, thresholds or {"hit": 0.4, "bounce": 0.4}, nms_radius):
+        frame = event.frame_number
+        detected = bool(track["detected"][frame])
+        events.append({
+            "frame_number": frame, "timestamp_seconds": float(times[frame]),
+            "event_type": event.event_type, "score": event.score,
+            "x": float(track["x"][frame]) if detected else None,
+            "y": float(track["y"][frame]) if detected else None,
+        })
     return sorted(events, key=lambda event: (event["frame_number"], event["event_type"]))
 
 
@@ -120,7 +119,8 @@ def load_experts(model_dir: Path, device: torch.device) -> tuple:
 
 
 def predict(video: Path, trajectory: Path, *, model_dir: Path = MODEL_DIR,
-            device: str = "auto", batch_size: int = 512, dino_batch_size: int = 64) -> dict:
+            device: str = "auto", batch_size: int = 512, dino_batch_size: int = 64,
+            thresholds: dict | None = None, nms_radius: int = 5) -> dict:
     if batch_size <= 0 or dino_batch_size <= 0:
         raise ValueError("batch size 必须为正数")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
@@ -158,7 +158,8 @@ def predict(video: Path, trajectory: Path, *, model_dir: Path = MODEL_DIR,
     # 各路 float32 分数转 Python float 后等权相加。
     scores = [[0.5 * a + 0.5 * b for a, b in zip(left, right, strict=True)]
               for left, right in zip(track_scores, visual_scores, strict=True)]
-    events = decode_events(scores, info["frame_times"], track)
+    thresholds = thresholds or {"hit": 0.4, "bounce": 0.4}
+    events = decode_events(scores, info["frame_times"], track, thresholds, nms_radius)
     postprocess_seconds = perf_counter() - stage
     elapsed = perf_counter() - started
     return {
@@ -170,7 +171,7 @@ def predict(video: Path, trajectory: Path, *, model_dir: Path = MODEL_DIR,
                    for i, score in enumerate(scores)],
         "events": events,
         "fusion": {"weights": {"track": 0.5, "visual": 0.5},
-                   "thresholds": {"hit": 0.4, "bounce": 0.4}, "nms_radius": 5},
+                   "thresholds": thresholds, "nms_radius": nms_radius},
         "cache": {"enabled": False, "hits": 0, "misses": 0},
         "timing": {"input_seconds": input_seconds, "model_load_seconds": model_seconds,
                    "decode_and_dino_seconds": visual_seconds, "track_seconds": track_seconds,
@@ -189,12 +190,16 @@ def main() -> None:
     parser.add_argument("--trajectory", type=Path, required=True, help="TrackNet 逐帧 CSV，可含缺失帧")
     parser.add_argument("--output", type=Path, required=True, help="分数、事件和耗时 JSON")
     parser.add_argument("--model-dir", type=Path, default=MODEL_DIR, help="三份本地权重所在目录")
+    parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.yaml"))
     parser.add_argument("--device", default="auto", help="auto、cpu、cuda 或 cuda:0")
-    parser.add_argument("--batch-size", type=int, default=512, help="事件头的中心帧 batch size")
+    parser.add_argument("--batch-size", type=int, help="事件头的中心帧 batch size，默认使用 config")
     parser.add_argument("--dino-batch-size", type=int, default=64, help="DINO 每批图像数，全图/裁剪分别处理")
     args = parser.parse_args()
+    config = load_config(args.config)["predict"]
     payload = predict(args.video, args.trajectory, model_dir=args.model_dir, device=args.device,
-                      batch_size=args.batch_size, dino_batch_size=args.dino_batch_size)
+                      batch_size=args.batch_size if args.batch_size is not None else config["batch_size"],
+                      dino_batch_size=args.dino_batch_size,
+                      thresholds=config["thresholds"], nms_radius=config["nms_radius"])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     stage = perf_counter()
     args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")

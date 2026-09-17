@@ -5,3 +5,5 @@ __pycache__/
 outputs/
 verification/
 models/dinov3_vitb16.pth
+cache/
+.pytest_cache/

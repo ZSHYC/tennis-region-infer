@@ -1,0 +1,98 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1789653200049,
+  "projectRoot": "/home/zshyc/tennis-region-infer",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "__pycache__": {
+      "path": "__pycache__",
+      "purpose": null,
+      "fileCount": 11,
+      "lastAccessed": 1789653200042,
+      "keyFiles": [
+        "dataset.cpython-311.pyc",
+        "dino.cpython-311.pyc",
+        "evaluate.cpython-311.pyc",
+        "inputs.cpython-311.pyc",
+        "metrics.cpython-311.pyc"
+      ]
+    },
+    "doc": {
+      "path": "doc",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1789653200043,
+      "keyFiles": [
+        "DINOv3-LICENSE.md",
+        "MODEL.md",
+        "TRAINING.md",
+        "VERIFICATION.md"
+      ]
+    },
+    "models": {
+      "path": "models",
+      "purpose": "Data models",
+      "fileCount": 3,
+      "lastAccessed": 1789653200045,
+      "keyFiles": [
+        "dinov3_vitb16.pth",
+        "trajectory_expert.pt",
+        "visual_expert.pt"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 8,
+      "lastAccessed": 1789653200046,
+      "keyFiles": [
+        "test_cli.py",
+        "test_dataset.py",
+        "test_dino.py",
+        "test_evaluate.py",
+        "test_inputs.py"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

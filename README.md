@@ -1,10 +1,18 @@
-# 网球击球与落地事件推理
+# 网球击球与落地事件：准备、训练、评估与推理
 
 输入一段原始视频及对应的 TrackNet 轨迹 CSV，输出每帧的击球（`hit`）、落地（`bounce`）分数，以及经过阈值与非极大值抑制筛选的事件。
 
 模型采用**轨迹专家与视觉专家等权融合**。轨迹专家读取球的位置和运动变化；视觉专家通过 DINOv3 编码全图与四个局部视图，分析跨帧画面。两路独立产生事件分数，再按各 50% 融合。模型标识为 `trajectory-visual-fusion-v1`。
 
-项目提供完整的视频推理链路：读取真实时间戳、对齐轨迹、生成模型输入、提取视觉特征、运行专家网络和输出事件。所有权重从本地加载，无需标注、现成特征缓存或在线服务。项目不包含训练、数据增强、标注、数据集制作、阈值搜索或模型成绩评估功能。
+2026-09-17：默认视觉权重已更新为 **sigma18**（`train.sigma=2.0` 的第 18 轮），来源为实验仓库的 `visual-region-sigma18-20260914.pt`。轨迹专家、融合比例、hit/bounce 阈值 0.4 和 NMS 半径 5 帧保持不变。这是回顾性的 validation 工程选择，不代表新的独立测试成绩。
+
+项目提供数据缓存准备、两位专家独立训练、固定工作点评估，以及无需 GT 的原视频推理。所有权重从本地加载，不隐式联网。不包含数据集切片、TrackNet 轨迹生成、标注制作或阈值搜索。
+
+**新训练方案：** `20260706_0712`、`2606_admin_back`、`loveall`、`tracknet_tennis`、`e2espot_tennis` 全部视频用于训练；只用 `back_match_clipped` 的 10 段及其 GT 评估。完全排除 `2606_admin_back_clipped`，不保留原 train/val/test 划分。当前本地清单为 3752 段训练、10 段评估。
+
+**尚未按新方案重新训练。** 仓库现有 B0＋sigma18 曾使用 back_match 的部分视频，因此它们在 back_match 上的成绩不能视为新方案的独立测试结果。新命令从头训练并输出独立权重，不自动覆盖 `models/`。
+
+完整命令见 [训练与评估指南](doc/TRAINING.md)，迁移范围见 [迁移说明](doc/MIGRATION.md)。下文主要说明原视频推理。
 
 ## 文档导航
 
@@ -19,7 +27,7 @@
 
 ### 1.1 运行依赖
 
-需要 Python 3.10 或更新版本，以及系统命令 `ffprobe`。Python 依赖仅为 NumPy、PyTorch、torchvision 和 OpenCV，版本范围见 [requirements.txt](requirements.txt)。
+需要 Python 3.10 或更新版本，以及系统命令 `ffprobe`。Python 依赖为 NumPy、PyTorch、torchvision、OpenCV 和 PyYAML，版本范围见 [requirements.txt](requirements.txt)。
 
 `ffprobe` 随 FFmpeg 提供，用于取得视频真实 PTS（显示时间戳）。它是系统程序，安装 Python 依赖不会自动安装它。安装 FFmpeg 后，在终端确认可调用：
 
@@ -297,6 +305,13 @@ print(result["events"])
 tennis-region-infer/
 ├── README.md
 ├── requirements.txt
+├── config.yaml                # 数据来源、训练设置和固定工作点
+├── dataset.py                 # 已发布数据发现、GT、缓存读取
+├── prepare.py                 # 原视频和标注到独立 base/visual 缓存
+├── train.py                   # 单专家固定轮数训练入口
+├── training.py                # 目标、损失、缺轨增强和恢复
+├── evaluate.py                # 只读 back_match 缓存评估
+├── metrics.py                 # 共享 NMS 和事件级一对一匹配
 ├── predict.py                 # 推理入口、时间窗口、融合与事件输出
 ├── inputs.py                  # 视频 PTS、轨迹 CSV 与运动特征
 ├── vision.py                  # 顺序解码、五视图输入与编码调度
@@ -307,10 +322,10 @@ tennis-region-infer/
 │   ├── MODEL.md               # 详细模型结构
 │   ├── VERIFICATION.md        # 实现验证记录
 │   └── DINOv3-LICENSE.md       # 许可原文
-└── tests/                     # 推理实现单元测试
+└── tests/                     # 输入、缓存、训练恢复、评估和推理检查
 ```
 
-运行需要五个源码文件及三份权重；部署时同时保留依赖说明与许可文件。`outputs/` 和本地检查产物不属于模型依赖。源码中没有固定的数据集路径，移动项目后可通过绝对输入路径继续使用。
+部署时保留根目录 Python 源码、`config.yaml`、三份权重、依赖说明与许可文件。`outputs/` 和本地检查产物不属于模型依赖。源码中没有固定的数据集路径，移动项目后可通过绝对输入路径继续使用。
 
 若使用 Git 管理部署版本，两份专家权重已纳入版本控制；DINOv3 大权重被 `.gitignore` 排除，需单独传递。只有源码仓库的副本不等于完整的模型部署副本。
 
@@ -334,7 +349,7 @@ tennis-region-infer/
 ## 9. 实现检查
 
 ```bash
-python -m unittest discover -s tests -v
+python -m pytest -q
 ```
 
-测试使用 Python 标准库 unittest，检查推理输入约定、网络前向、时间采样和后处理，不运行训练或模型成绩评估。缺少可选本地权重时部分测试会跳过，因此部署完整性还应以三份权重均在位且真实推理成功为准。已完成的数值与真实视频检查见[实现验证记录](doc/VERIFICATION.md)。
+完整测试使用 pytest（兼容已有 unittest），覆盖推理、数据来源隔离、缓存、合成训练与恢复、事件匹配；不会训练真实数据集。可执行 `python -m pip install pytest` 后运行 `python -m pytest -q`。缺少可选本地权重时部分测试会跳过，因此部署完整性还应以三份权重均在位且真实推理成功为准。已完成的数值与真实视频检查见[实现验证记录](doc/VERIFICATION.md)。
